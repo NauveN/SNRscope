@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'modelos/Senal.dart';
 import 'modelos/RuidoTermico.dart';
@@ -23,14 +24,17 @@ class _PantallaEspectroState extends State<PantallaEspectro> {
   double bwTotalHz = 10e6; // 10 MHz
   double frecuenciaMin = 90.0;
   double frecuenciaMax = 110.0;
+  double? pisoRuidoDbm; // <-- NUEVO
 
   void calcularEspectro() {
     final ruidoTermico = RuidoTermico(
       temperaturaK: temperatura,
       anchoDeBandaHz: bwTotalHz,
+      ruidoSistemaDb: pisoRuidoDbm, // pasa el valor si existe
     );
-    final promedio = ruidoTermico.calcularRuidoPromedioDbm();
-    final ruidoGenerado = ruidoTermico.generarRuidoAleatorio(100);
+    // Si el usuario ingresó el piso de ruido, úsalo directamente, si no, calcula
+    final promedio = pisoRuidoDbm ?? ruidoTermico.calcularRuidoPromedioDbm();
+    final ruidoGenerado = ruidoTermico.generarRuidoAleatorio(100, promedio);
 
     final mediciones = Calculos.calcularComparaciones(senales, promedio);
 
@@ -51,18 +55,18 @@ class _PantallaEspectroState extends State<PantallaEspectro> {
     showDialog(
       context: context,
       builder: (context) {
-        final _potCtrl = TextEditingController(text: senal.potenciaDbm.toString());
-        final _fcCtrl = TextEditingController(text: senal.frecuenciaCentralMHz.toString());
-        final _bwCtrl = TextEditingController(text: senal.anchoDeBandaMHz.toString());
+        final potCtrl = TextEditingController(text: senal.potenciaDbm.toString());
+        final fcCtrl = TextEditingController(text: senal.frecuenciaCentralMHz.toString());
+        final bwCtrl = TextEditingController(text: senal.anchoDeBandaMHz.toString());
 
         return AlertDialog(
           title: const Text('Editar Señal'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: _potCtrl, decoration: const InputDecoration(labelText: 'Potencia')), 
-              TextField(controller: _fcCtrl, decoration: const InputDecoration(labelText: 'Frecuencia central')),
-              TextField(controller: _bwCtrl, decoration: const InputDecoration(labelText: 'Ancho de banda')),
+              TextField(controller: potCtrl, decoration: const InputDecoration(labelText: 'Potencia')), 
+              TextField(controller: fcCtrl, decoration: const InputDecoration(labelText: 'Frecuencia central')),
+              TextField(controller: bwCtrl, decoration: const InputDecoration(labelText: 'Ancho de banda')),
             ],
           ),
           actions: [
@@ -70,9 +74,9 @@ class _PantallaEspectroState extends State<PantallaEspectro> {
               onPressed: () {
                 setState(() {
                   senales[index] = Senal(
-                    potenciaDbm: double.parse(_potCtrl.text),
-                    frecuenciaCentralMHz: double.parse(_fcCtrl.text),
-                    anchoDeBandaMHz: double.parse(_bwCtrl.text),
+                    potenciaDbm: double.parse(potCtrl.text),
+                    frecuenciaCentralMHz: double.parse(fcCtrl.text),
+                    anchoDeBandaMHz: double.parse(bwCtrl.text),
                   );
                 });
                 Navigator.pop(context);
@@ -131,12 +135,26 @@ class _PantallaEspectroState extends State<PantallaEspectro> {
           children: [
             // Formulario para el piso de ruido
             FormularioRuidoTermico(
-              onSubmit: (temp, bw) {
+              onSubmit: (temp, bw, pisoDbm) {
                 setState(() {
                   temperatura = temp;
                   bwTotalHz = bw;
+                  pisoRuidoDbm = pisoDbm; // guarda el valor
                 });
               },
+            ),
+            const SizedBox(height: 10),
+            // Mostrar el valor actual del piso de ruido
+            Row(
+              children: [
+                const Text('Piso de ruido actual: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  pisoRuidoDbm != null
+                      ? '${pisoRuidoDbm!.toStringAsFixed(2)} dBm'
+                      : '${RuidoTermico(temperaturaK: temperatura, anchoDeBandaHz: bwTotalHz).calcularRuidoPromedioDbm().toStringAsFixed(2)} dBm',
+                  style: const TextStyle(color: Colors.blue),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             FormularioSenales(
@@ -168,7 +186,7 @@ class _PantallaEspectroState extends State<PantallaEspectro> {
               ),
             ),
             const SizedBox(height: 10),
-            ...resultados.map((r) => Text(r)).toList(),
+            ...resultados.map((r) => Text(r)),
           ],
         ),
       ),

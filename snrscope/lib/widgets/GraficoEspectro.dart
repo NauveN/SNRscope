@@ -24,21 +24,18 @@ class GraficoEspectro extends StatelessWidget {
       return const Center(child: Text('No hay datos de ruido suficientes'));
     }
 
-    // --- Rango extendido para mostrar todo ---
     double rangoExtendido = (frecuenciaMax - frecuenciaMin) * 2.5;
     double xStart = frecuenciaMin - rangoExtendido / 2;
     double xEnd = frecuenciaMax + rangoExtendido / 2;
 
     int totalPoints = 2000;
-
-    // --- Generar piso de ruido extendido (aleatorio en todo el rango) ---
+    // --- Generar el piso de ruido extendido ---
     double promedio = ruido.reduce((a, b) => a + b) / ruido.length;
     double desv = sqrt(ruido.map((v) => pow(v - promedio, 2)).reduce((a, b) => a + b) / ruido.length);
     final random = Random();
     List<FlSpot> ruidoExtendido = [];
     for (int i = 0; i <= totalPoints; i++) {
       double x = xStart + (xEnd - xStart) * i / totalPoints;
-      // Ruido aleatorio en todo el rango, con la misma estadística que el ruido original
       double y = promedio + (random.nextDouble() - 0.5) * 2 * max(desv, 1.0);
       ruidoExtendido.add(FlSpot(x, y));
     }
@@ -61,7 +58,7 @@ class GraficoEspectro extends StatelessWidget {
       todasLasParabolas.add(parabolaSpots);
     }
 
-    // --- Generar la línea resaltada (envolvente) ---
+    // --- Generar la línea resaltada ---
     List<FlSpot> envolvente = [];
     for (int i = 0; i <= totalPoints; i++) {
       double x = xStart + (xEnd - xStart) * i / totalPoints;
@@ -78,7 +75,7 @@ class GraficoEspectro extends StatelessWidget {
       envolvente.add(FlSpot(x, yEnv));
     }
 
-    // --- Puntos destacados (opcional, para tooltips) ---
+    // --- Puntos destacados ---
     List<FlSpot> puntosSenales = [];
     List<FlSpot> puntosLaterales = [];
     for (final senal in senales) {
@@ -121,7 +118,6 @@ class GraficoEspectro extends StatelessWidget {
 
     // --- LÍNEAS PARA EL GRÁFICO ---
     final List<LineChartBarData> lineBars = [
-      // Piso de ruido extendido (gris)
       LineChartBarData(
         spots: ruidoExtendido,
         isCurved: true,
@@ -129,15 +125,15 @@ class GraficoEspectro extends StatelessWidget {
         barWidth: 2,
         dotData: FlDotData(show: false),
       ),
-      // Todas las señales (gris claro, fondo)
+      // Todas las señales
       ...todasLasParabolas.map((parabolaSpots) => LineChartBarData(
             spots: parabolaSpots,
             isCurved: true,
-            color: Colors.grey.withOpacity(0.5), // Gris claro, sin resaltar
+            color: Colors.grey.withOpacity(0.5),
             barWidth: 2,
             dotData: FlDotData(show: false),
           )),
-      // Línea resaltada (envolvente, azul fuerte)
+      // Línea resaltada
       LineChartBarData(
         spots: envolvente,
         isCurved: true,
@@ -147,7 +143,7 @@ class GraficoEspectro extends StatelessWidget {
       ),
     ];
 
-    // Puntos centrales y laterales (opcional)
+    // Puntos centrales y laterales
     if (puntosSenales.isNotEmpty) {
       lineBars.add(
         LineChartBarData(
@@ -251,9 +247,9 @@ class GraficoEspectro extends StatelessWidget {
   }
 }
 
-// Nuevo formulario para el piso de ruido (temperatura y ancho de banda)
+// formulario para calcular el ruido térmico
 class FormularioRuidoTermico extends StatefulWidget {
-  final void Function(double temperatura, double bwHz) onSubmit;
+  final void Function(double temperatura, double bwHz, double? pisoDbm) onSubmit;
 
   const FormularioRuidoTermico({super.key, required this.onSubmit});
 
@@ -265,11 +261,13 @@ class _FormularioRuidoTermicoState extends State<FormularioRuidoTermico> {
   final _formKey = GlobalKey<FormState>();
   final _tempCtrl = TextEditingController(text: '');
   final _bwCtrl = TextEditingController(text: '');
+  final _pisoDbmCtrl = TextEditingController(text: '');
 
   @override
   void dispose() {
     _tempCtrl.dispose();
     _bwCtrl.dispose();
+    _pisoDbmCtrl.dispose();
     super.dispose();
   }
 
@@ -283,20 +281,44 @@ class _FormularioRuidoTermicoState extends State<FormularioRuidoTermico> {
             controller: _tempCtrl,
             decoration: const InputDecoration(labelText: 'Temperatura (K)'),
             keyboardType: TextInputType.number,
-            validator: (val) => val == null || val.isEmpty ? 'Requerido' : null,
+            validator: (val) {
+              if ((_pisoDbmCtrl.text.isEmpty) && (val == null || val.isEmpty)) {
+                return 'Requerido si no se ingresa piso de ruido dBm';
+              }
+              return null;
+            },
           ),
           TextFormField(
             controller: _bwCtrl,
-            decoration: const InputDecoration(labelText: 'Ancho de banda (Hz)'),
+            decoration: const InputDecoration(labelText: 'Ancho de banda (KHz)'),
             keyboardType: TextInputType.number,
-            validator: (val) => val == null || val.isEmpty ? 'Requerido' : null,
+            validator: (val) {
+              if ((_pisoDbmCtrl.text.isEmpty) && (val == null || val.isEmpty)) {
+                return 'Requerido si no se ingresa piso de ruido dBm';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 8),
+          const Text('O ingrese el piso de ruido directamente:'),
+          TextFormField(
+            controller: _pisoDbmCtrl,
+            decoration: const InputDecoration(labelText: 'Piso de ruido (dBm)'),
+            keyboardType: TextInputType.number,
+            validator: (val) {
+              if ((_tempCtrl.text.isEmpty || _bwCtrl.text.isEmpty) && (val == null || val.isEmpty)) {
+                return 'Ingrese piso de ruido dBm o complete los campos anteriores';
+              }
+              return null;
+            },
           ),
           ElevatedButton(
             onPressed: () {
               if (_formKey.currentState!.validate()) {
                 final temp = double.tryParse(_tempCtrl.text.trim()) ?? 290.0;
                 final bw = double.tryParse(_bwCtrl.text.trim()) ?? 1e6;
-                widget.onSubmit(temp, bw);
+                final pisoDbm = double.tryParse(_pisoDbmCtrl.text.trim());
+                widget.onSubmit(temp, bw, pisoDbm);
               }
             },
             child: const Text('Generar Ruido'),

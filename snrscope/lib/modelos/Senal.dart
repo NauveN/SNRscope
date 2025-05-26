@@ -8,7 +8,7 @@ class Senal {
     required this.frecuenciaCentralMHz,
     required this.anchoDeBandaMHz,
   });
-  // Método para calcular la potencia en miliwatios (mW)
+
   double calcularPotenciaMw() => potenciaDbm * 0.001;
 
   @override
